@@ -1,0 +1,415 @@
+---
+title: "1. Cohort selection"
+output: html_notebook
+---
+
+This notebook creates the necessary materialized views in SQL and the necessary CSV files for further analyses.
+
+```{r}
+library(tidyverse)
+library(RPostgreSQL)
+
+driver <- dbDriver("PostgreSQL")
+db <- dbConnect(
+  driver,
+  dbname = "mimiciii",
+  host = "localhost",
+  port = "5432",
+  user = "mimicuser"
+)
+
+getSQL <- function(filepath){
+  con = file(filepath, "r")
+  sql.string <- ""
+
+  while (TRUE){
+    line <- readLines(con, n = 1)
+
+    if ( length(line) == 0 ){
+      break
+    }
+
+    line <- gsub("\\t", " ", line)
+
+    if(grepl("--",line) == TRUE){
+      line <- paste(sub("--","/*",line),"*/")
+    }
+
+    sql.string <- paste(sql.string, line)
+  }
+
+  close(con)
+  return(sql.string)
+}
+```
+
+# Generate materialized views
+
+## Echo data
+
+```{r}
+query <- getSQL("mimic-code/concepts/echo-data.sql")
+print("Generating table 'echodata'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## First day data
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/urine-output-first-day.sql")
+print("Generating table 'uofirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/vitals-first-day.sql")
+print("Generating table 'vitalsfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/gcs-first-day.sql")
+print("Generating table 'gcsfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/labs-first-day.sql")
+print("Generating table 'labsfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/blood-gas-first-day.sql")
+print("Generating table 'bloodgasfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/blood-gas-first-day-arterial.sql")
+print("Generating table 'bloodgasfirstdayarterial'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/ventilation-first-day.sql")
+print("Generating table 'ventfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/height-first-day.sql")
+print("Generating table 'heightfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/firstday/weight-first-day.sql")
+print("Generating table 'weightfirstday'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Demographics
+
+```{r}
+query <- getSQL("mimic-code/concepts/demographics/icustay-detail.sql")
+print("Generating table 'icustay_detail'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Durations
+
+```{r}
+query <- getSQL("mimic-code/concepts/durations/weight-durations.sql")
+print("Generating table 'weightdurations'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/durations/ventilation-durations.sql")
+print("Generating table 'ventdurations'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/durations/vasopressor-durations.sql")
+print("Generating table 'vasopressordurations'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Severity scores
+
+```{r}
+query <- getSQL("mimic-code/concepts/severityscores/sofa.sql")
+print("Generating table 'sofa'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/severityscores/sapsii.sql")
+print("Generating table 'sapsii'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/severityscores/apsiii.sql")
+print("Generating table 'apsiii'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Diagnosis categories
+
+```{r}
+query <- getSQL("mimic-code/concepts/diagnosis/ccs_diagnosis_table.sql")
+print("Generating tables 'ccs_single_level_dx' and 'ccs_multi_level_dx'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Renal replacement therapy
+
+```{r}
+query <- getSQL("mimic-code/concepts/rrt.sql")
+print("Generating table 'rrt'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Comorbidities
+
+```{r}
+query <- getSQL("mimic-code/concepts/comorbidity/elixhauser-ahrq-v37-with-drg.sql")
+print("Generating table 'elixhauser_ahrq'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Norepinephrine
+
+```{r}
+query <- getSQL("mimic-code/concepts/durations/norepinephrine-dose.sql")
+print("Generating table 'norepinephrine_dose'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("mimic-code/concepts/duratins/norepinephrine-durations")
+print("Generating table 'norepinephrinedurations'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Suspicion of infection
+
+```{r}
+query <- getSQL("sql/suspected_infection.sql")
+print("Generating table 'suspected_infection'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Arterial blood gases
+
+```{r}
+query <- getSQL("sql/all_abg.sql")
+print("Generating table 'abg_all'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Infectious sources
+
+```{r}
+query <- getSQL("sql/infectious_sources.sql")
+print("Generating table 'infectious_sources'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+## Cohort tables
+
+```{r}
+query <- getSQL("sql/cohort.sql")
+print("Generating table 'cohort_all'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("sql/abg_sepsis.sql")
+print("Generating table 'abg_sepsis'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+```{r}
+query <- getSQL("sql/cohort_sepsis.sql")
+print("Generating table 'cohort_sepsis'...")
+dbGetQuery(db, query)
+print("... Done")
+```
+
+# Cohort selection
+
+```{r}
+cohort_all <- tbl(db, "cohort_all")
+manual_review <- readLines("data/not_sepsis.csv")
+```
+
+## All ICU admissions
+
+```{r}
+cohort_all %>%
+  tally()
+```
+
+## Adult patients
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18) %>%
+  tally()
+```
+
+## First ICU stay
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1) %>%
+  tally()
+```
+
+## LOS at least 24 hours
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1) %>%
+  tally()
+```
+
+## Exclude CSRU, CCU and TSICU patients
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1 &
+           !first_careunit %in% c("CSRU", "CCU", "TSICU")) %>%
+  tally()
+```
+
+## At least 1 ABG
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1 &
+           !first_careunit %in% c("CSRU", "CCU", "TSICU") &
+           abg_count >= 1) %>%
+  tally()
+```
+
+## At least 24h of mechanical ventilation during the first 24 hours
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1 &
+           !first_careunit %in% c("CSRU", "CCU", "TSICU") &
+           abg_count >= 1 &
+           vent_first_duration >= 24) %>%
+  tally()
+```
+
+## Sepsis patients
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1 &
+           !first_careunit %in% c("CSRU", "CCU", "TSICU") &
+           abg_count >= 1 &
+           vent_first_duration >= 24 &
+           flag_sepsis == 1) %>%
+  tally()
+```
+
+## Septic shock
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1 &
+           !first_careunit %in% c("CSRU", "CCU", "TSICU") &
+           abg_count >= 1 &
+           vent_first_duration >= 24 &
+           flag_sepsis == 1 &
+           flag_shock == 1) %>%
+  tally()
+```
+
+## Final cohort
+
+```{r}
+cohort_all %>%
+  filter(admission_age >= 18 & 
+           icustay_seq == 1 &
+           los_icu >= 1 &
+           !first_careunit %in% c("CSRU", "CCU", "TSICU") &
+           abg_count >= 1 &
+           vent_first_duration >= 24 &
+           flag_sepsis == 1 &
+           flag_shock == 1 &
+           !subject_id %in% !!manual_review) %>%
+  tally()
+```
+
+# Datasets
+
+## Sepsis cohort
+
+```{r}
+cohort_sepsis <- tbl(db, "cohort_sepsis") %>% collect()
+
+write_csv(cohort_sepsis, "data/cohort_sepsis.csv")
+```
+
+## Septic shock cohort 
+```{r}
+cohort_shock <- cohort_sepsis %>%
+  filter(flag_shock == 1 &
+           !subject_id %in% !!manual_review)
+
+write.csv(cohort_shock, "data/cohort_shock.csv")
+```
+
+```{r}
+dbDisconnect(db)
+dbUnloadDriver(driver)
+```

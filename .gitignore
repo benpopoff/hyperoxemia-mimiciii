@@ -1,0 +1,15 @@
+# R files
+*.Rproj
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.nb.html
+
+# Data
+*.csv
+*.rda
+
+# Outputs
+*.pdf
+*.html

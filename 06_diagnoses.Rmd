@@ -1,0 +1,51 @@
+---
+title: "6.Diagnoses"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r message=FALSE, warning=FALSE}
+library(RPostgreSQL)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+
+driver <- dbDriver("PostgreSQL")
+db <- dbConnect(
+  driver,
+  dbname = "mimiciii",
+  host = "localhost",
+  port = "5432",
+  user = "mimicuser"
+)
+
+icd9_codes <- tbl(db, "diagnoses_icd")
+icd9_dict <- tbl(db, "d_icd_diagnoses")
+cohort <- read_csv("data/cohort_shock_twavgpo2.csv")
+```
+
+# Most frequent ICD9 codes in the cohort
+```{r}
+cohort_icd9 <- icd9_codes %>%
+  left_join(icd9_dict, by = "icd9_code") %>%
+  select(subject_id, icd9_code, short_title) %>%
+  filter(subject_id %in% !!cohort$subject_id) %>%
+  group_by(icd9_code, short_title) %>%
+  tally(sort = TRUE) %>%
+  head(20) %>%
+  collect() %>%
+  mutate(prop = round(n/488*100, 1))
+```
+
+```{r}
+cohort_icd9 %>%
+  mutate(res = paste0(n, " (", prop, ")")) %>%
+  select(-n, -prop) %>%
+  kable(
+    caption = "20 most represented ICD9 codes in the whole cohort",
+    col.names = c("ICD9 code", "Code description", "n (%)")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+

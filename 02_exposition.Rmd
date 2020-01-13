@@ -1,0 +1,126 @@
+---
+title: "2.Exposition: Time weighted average PaO2"
+output: html_notebook
+---
+
+This notebook computes the time-weighted average PaO2 (TWA-PaO2) over the first 24 hours and selects the final cohort.
+
+```{r}
+library(RPostgreSQL)
+library(tidyverse)
+library(lubridate)
+
+driver <- dbDriver("PostgreSQL")
+db <- dbConnect(
+  driver,
+  dbname = "mimiciii",
+  host = "localhost",
+  port = "5432",
+  user = "mimicuser"
+  )
+```
+
+```{r}
+TimeWeightedAvgPo2 <- function(abg, intime){
+  # Compute the time weigted average of several PaO2
+  #
+  # Args:
+  #   abg: Dataframe containing the po2 values and the corresponding charttime
+  #   intime: Date and time of subject admission in the ICU
+  #
+  # Returns:
+  #   The time weighted PaO2 mean value in mmHg
+  
+  abg$weight <- 0
+
+  for (i in 1:nrow(abg)) {
+      last <- 0
+    
+      # First ABG : time difference with intime
+      if(i == 1){
+        abg[1, "weight"] <- difftime(abg[1, "charttime"], intime, units = "hours")
+      }
+      else {
+        # ABG between the first 24 hours
+        if(abg[i, "charttime"] < intime + 24*60*60){
+          abg[i, "weight"] <- difftime(abg[i, "charttime"], abg[i-1, "charttime"], units = "hours")
+          last <- i
+        }
+        else {
+          # First ABG after the 24 first hours
+          if(i == last + 1){
+            # Duration until the 24th hour and the last ABG
+            abg[i, "weight"] <- difftime(intime+24*60*60, abg[i-1, "charttime"], units = "hours")
+          }
+        }
+      }
+  }
+
+  result <- round(weighted.mean(abg$po2, abg$weight), 2)
+  result
+}
+```
+
+# Compute time weighted average PaO2 for every patient
+```{r}
+cohort_shock <- read.csv("data/cohort_shock.csv")
+cohort_shock$intime <- as.POSIXct(cohort_shock$intime)
+```
+
+```{r}
+query <- "select icustay_id, 
+  Cast(charttime as Varchar) as charttime, 
+  po2
+from abg_sepsis
+left join cohort_sepsis as co using (icustay_id)
+where co.flag_shock = 1
+and charttime >= intime
+and po2 is not null
+order by icustay_id asc, charttime asc;"
+abg_all <- dbGetQuery(db, query)
+
+#abg_all$charttime <- as.POSIXct(strptime(abg_all$charttime, "%Y-%m-%d %H:%M:%S"))
+abg_all$charttime <- ymd_hms(abg_all$charttime)
+```
+
+```{r}
+cohort_shock$twavg_po2 <- 0
+
+for(i in 1:nrow(cohort_shock)){
+  id <- cohort_shock[i, "icustay_id"]
+  abg <- subset(abg_all, icustay_id == id, select = c("charttime", "po2"))
+  intime <- cohort_shock[i, "intime"]
+  cohort_shock[i, "twavg_po2"] <- TimeWeightedAvgPo2(abg, intime)
+  #print(paste("icustay = ", id, "twavg_po2 = ", TimeWeightedAvgPo2(abg, intime)))
+}
+
+summary(cohort_shock)
+```
+
+# Exposition groups: hypoxia, normoxia, hyperoxia
+
+```{r}
+cohort_shock$hypero2 <- cut(cohort_shock$twavg_po2, breaks = c(0, 70, 120, Inf), include.lowest = TRUE)
+levels(cohort_shock$hypero2) <- c("hypo", "normo", "hyper")
+```
+
+```{r}
+table(cohort_shock$hypero2)
+```
+
+```{r}
+# Exclude hypoxemia patients
+cohort_shock <- cohort_shock %>% 
+  filter(hypero2 != "hypo")
+
+cohort_shock$hypero2 <- factor(cohort_shock$hypero2)
+```
+
+```{r}
+write_csv(cohort_shock, "data/cohort_shock_twavgpo2.csv")
+```
+
+```{r}
+dbDisconnect(db)
+dbUnloadDriver(driver)
+```

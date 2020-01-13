@@ -1,0 +1,50 @@
+---
+title: "3.Flow chart"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r, include=FALSE}
+library(DiagrammeR)
+```
+
+```{r}
+grViz("digraph flowchart {
+  # node definitions
+  node [fontname = Helvetica, shape = box, width = 3]
+  tab1 [label = 'All ICU admissions\\n(n = 61,532)']
+  tab3 [label = 'Elligible admissions\\n(n = 4,320)']
+  tab5 [label = 'Final cohort\\n(n = 488)']
+  tab6 [label = 'Normoxia group\\n(n = 214)']
+  tab7 [label = 'Hyperoxia group\\n(n = 274)']
+  tab8 [label = 'Excluded (n = 57,212)\\l- Age < 18 (n = 8,202)\\l- Not first admission (n = 3,636)\\l- LOS < 24 hours (n = 7,614)\\l- CSRU, CCU or TSICU (n = 18,841)\\l- No ABG (n = 9,831)\\l- < 24 hours of MV (n = 9,088)\\l']
+  tab9 [label = 'Excluded (n = 3,832)\\l- No sign of sepsis (n = 1,507)\\l- No sign of septic shock (n = 2,168)\\l- Manual review (n = 130)\\l- Hypoxia (n = 27)\\l']
+  
+  node [fontname = Helvetica, shape = point, height = 0.01, weight = 0.01]
+  tab2 [label = '']
+  tab4 [label = '']
+  
+  subgraph {
+    rank = same; tab2; tab8;
+  }
+  
+  subgraph {
+    rank = same; tab4; tab9;
+  }
+  
+  # edge definitions
+  tab2 -> tab3;
+  tab4 -> tab5 -> { tab6 tab7 };
+  
+  edge [arrowhead = none]
+  tab1 -> tab2;
+  tab3 -> tab4;
+  
+  edge [minlen = 5, arrowhead = normal]
+  tab2 -> tab8;
+  tab4 -> tab9;
+}
+
+  ")
+```
