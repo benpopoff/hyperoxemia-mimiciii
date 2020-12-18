@@ -11,50 +11,10 @@ library(knitr)
 library(kableExtra)
 library(reshape2)
 
-cohort <- read_csv("data/cohort_shock_twavgpo2.csv")
+cohort <- readRDS("data/cohort_shock_twavgpo2.rds")
 ```
 
 ```{r}
-cohort$X <- NULL
-cohort$first_careunit <- factor(cohort$first_careunit)
-cohort$first_wardid <- factor(cohort$first_wardid)
-cohort$admission_type <- factor(cohort$admission_type)
-cohort$vaso_firstday <- factor(cohort$vaso_firstday)
-cohort$gender <- factor(cohort$gender)
-cohort$rrt <- as.factor(cohort$rrt)
-cohort$comorbidity_cardio <- factor(cohort$comorbidity_cardio)
-cohort$comorbidity_vascular <- factor(cohort$comorbidity_vascular)
-cohort$comorbidity_neuro <- factor(cohort$comorbidity_neuro)
-cohort$comorbidity_pneumo <- factor(cohort$comorbidity_pneumo)
-cohort$comorbidity_metabolic <- factor(cohort$comorbidity_metabolic)
-cohort$comorbidity_renal <- factor(cohort$comorbidity_renal)
-cohort$comorbidity_liver <- factor(cohort$comorbidity_liver)
-cohort$comorbidity_cancer <- factor(cohort$comorbidity_cancer)
-cohort$noso_vap <- factor(cohort$noso_vap)
-cohort$noso_urinary <- factor(cohort$noso_urinary)
-cohort$noso_cvc <- factor(cohort$noso_cvc)
-cohort$noso_cvc_other <- factor(cohort$noso_cvc_other)
-cohort$source_pulm <- factor(cohort$source_pulm)
-cohort$source_urogyn <- factor(cohort$source_urogyn)
-cohort$source_neuro <- factor(cohort$source_neuro)
-cohort$source_dig <- factor(cohort$source_dig)
-cohort$source_ost <- factor(cohort$source_ost)
-cohort$source_ent <- factor(cohort$source_ent)
-cohort$source_card <- factor(cohort$source_card)
-cohort$source_skin <- factor(cohort$source_skin)
-cohort$source_other <- factor(cohort$source_other)
-cohort$death_icu <- factor(cohort$death_icu)
-cohort$death_thirtydays <- factor(cohort$death_thirtydays)
-cohort$death_hosp <- factor(cohort$death_hosp)
-cohort$hypero2 <- factor(cohort$hypero2)
-cohort$flag_shock <- factor(cohort$flag_shock)
-
-# Merge Emergency and Urgent admission types
-cohort$admission_type <- as.character(cohort$admission_type)
-cohort$admission_type[cohort$admission_type %in% c("EMERGENCY", "URGENT")] <- "Emergency/Urgent"
-cohort$admission_type <- factor(cohort$admission_type)
-levels(cohort$admission_type) <- c("Elective", "Emergency/Urgent")
-
 summary(cohort)
 ```
 
@@ -145,7 +105,6 @@ cohort %>%
     y = "Missing values",
     x = "Variables"
   ) +
-  scale_fill_grey() +
   theme_bw() +
   theme(
     axis.title.x = element_text(size = 24),
@@ -155,5 +114,21 @@ cohort %>%
   )
 ```
 
-# Diagnosis codes
+```{r}
+cohort %>%
+  group_by(twavg_po2_interv = cut_interval(twavg_po2, length = 10)) %>%
+  count(death_icu) %>% 
+  pivot_wider(names_from = death_icu, values_from = n, names_prefix = "death_icu_") %>% 
+  mutate(death_icu_prob = death_icu_1/(death_icu_0 + death_icu_1)) %>% 
+  ggplot(aes(x = twavg_po2_interv, y = death_icu_prob)) +
+  geom_bar(stat = "identity") +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 0.5)
+  ) +
+  labs(
+    y = "In-ICU death ratio",
+    x = "TWA-PaO2"
+  )
+```
+
 

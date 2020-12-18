@@ -7,10 +7,12 @@ output:
 
 ```{r, include=FALSE}
 library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
 ```
 
 ```{r}
-grViz("digraph flowchart {
+flowchart <- grViz("digraph flowchart {
   # node definitions
   node [fontname = Helvetica, shape = box, width = 3]
   tab1 [label = 'All ICU admissions\\n(n = 61,532)']
@@ -47,4 +49,14 @@ grViz("digraph flowchart {
 }
 
   ")
+
+flowchart
 ```
+
+```{r}
+flowchart %>%
+    export_svg() %>%
+    charToRaw %>% 
+    rsvg_pdf("figure1_flowchart.pdf")
+```
+

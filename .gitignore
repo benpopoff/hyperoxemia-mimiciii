@@ -9,6 +9,7 @@
 # Data
 *.csv
 *.rda
+*.rds
 
 # Outputs
 *.pdf

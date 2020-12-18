@@ -13,51 +13,15 @@ library(kableExtra)
 library(Epi)
 library(survival)
 library(broom)
+library(corrplot)
+library(patchwork)
 library(survminer)
 library(MBESS)
+library(VGAM)
 
-cohort <- read_csv("data/cohort_shock_twavgpo2.csv")
+palette <- c("#0099CC", "#D55E00")
 
-cohort$X <- NULL
-cohort$first_careunit <- factor(cohort$first_careunit)
-cohort$first_wardid <- factor(cohort$first_wardid)
-cohort$admission_type <- factor(cohort$admission_type)
-cohort$vaso_firstday <- factor(cohort$vaso_firstday)
-cohort$gender <- factor(cohort$gender)
-cohort$rrt <- as.factor(cohort$rrt)
-cohort$comorbidity_cardio <- factor(cohort$comorbidity_cardio)
-cohort$comorbidity_vascular <- factor(cohort$comorbidity_vascular)
-cohort$comorbidity_neuro <- factor(cohort$comorbidity_neuro)
-cohort$comorbidity_pneumo <- factor(cohort$comorbidity_pneumo)
-cohort$comorbidity_metabolic <- factor(cohort$comorbidity_metabolic)
-cohort$comorbidity_renal <- factor(cohort$comorbidity_renal)
-cohort$comorbidity_liver <- factor(cohort$comorbidity_liver)
-cohort$comorbidity_cancer <- factor(cohort$comorbidity_cancer)
-cohort$noso_vap <- factor(cohort$noso_vap)
-cohort$noso_urinary <- factor(cohort$noso_urinary)
-cohort$noso_cvc <- factor(cohort$noso_cvc)
-cohort$noso_cvc_other <- factor(cohort$noso_cvc_other)
-cohort$source_pulm <- factor(cohort$source_pulm)
-cohort$source_urogyn <- factor(cohort$source_urogyn)
-cohort$source_neuro <- factor(cohort$source_neuro)
-cohort$source_dig <- factor(cohort$source_dig)
-cohort$source_ost <- factor(cohort$source_ost)
-cohort$source_ent <- factor(cohort$source_ent)
-cohort$source_card <- factor(cohort$source_card)
-cohort$source_skin <- factor(cohort$source_skin)
-cohort$source_other <- factor(cohort$source_other)
-cohort$death_icu <- factor(cohort$death_icu)
-cohort$death_thirtydays <- factor(cohort$death_thirtydays)
-cohort$death_hosp <- factor(cohort$death_hosp)
-cohort$flag_shock <- factor(cohort$flag_shock)
-cohort$hypero2 <- factor(cohort$hypero2)
-cohort$hypero2 <- relevel(cohort$hypero2, ref = "normo")
-
-# Merge Emergency and Urgent admission types
-cohort$admission_type <- as.character(cohort$admission_type)
-cohort$admission_type[cohort$admission_type %in% c("EMERGENCY", "URGENT")] <- "Emergency/Urgent"
-cohort$admission_type <- factor(cohort$admission_type)
-levels(cohort$admission_type) <- c("Elective", "Emergency/Urgent")
+cohort <- readRDS("data/cohort_shock_twavgpo2.rds")
 
 # Replace anonymized ages (above 300 y/o) with 89
 cohort <- cohort %>%
@@ -88,7 +52,7 @@ table_demo_data <- cohort %>%
   ) %>%
   rename(
     "Age (years)" = admission_age,
-    "Male" = gender,
+    "Sexe (Male)" = gender,
     "BMI (kg/m2)" = bmi_firstday,
     "SAPSII" = sapsii,
     "SOFA" = sofa,
@@ -104,10 +68,14 @@ table_demo_data <- cohort %>%
     "Cancer" = comorbidity_cancer
   )
 
-factor_vars <- c("Male", "First ICU (SICU)", "Admission type (Emergency/Urgent)",
-                 "Cardiac", "Vascular", "Neurological", "Pulmonary", "Metabolic",
-                 "Renal", "Liver", "Cancer")
-nonnormal_vars <- c("SAPSII", "SOFA")
+factor_vars <- c(
+  "Sexe (Male)", "First ICU (SICU)", "Admission type (Emergency/Urgent)",
+  "Cardiac", "Vascular", "Neurological", "Pulmonary", "Metabolic",
+  "Renal", "Liver", "Cancer"
+  )
+nonnormal_vars <- c(
+  "Age (years)", "BMI (kg/m2)", "SAPSII", "SOFA"
+  )
 
 table_demo <- CreateTableOne(
   vars = names(table_demo_data)[-length(names(table_demo_data))],
@@ -274,6 +242,7 @@ table_bio <- CreateTableOne(
 )
 table_bio_print <- print(
   table_bio,
+  nonnormal = names(table_bio_data)[-length(names(table_bio_data))],
   dropEqual = TRUE,
   printToggle = FALSE
 )
@@ -286,6 +255,7 @@ table_bio_all <- CreateTableOne(
 )
 table_bio_all_print <- print(
   table_bio_all,
+  nonnormal = names(table_bio_data)[-length(names(table_bio_data))],
   dropEqual = TRUE,
   printToggle = FALSE
 )
@@ -306,6 +276,133 @@ kable(
   group_rows("Blood count and hemostasis", 17, 20)
 ```
 
+## Survivors vs non survivors
+
+```{r message=FALSE, warning=FALSE}
+table_surv_data <- cohort %>% 
+  select(
+    admission_age,
+    gender,
+    bmi_firstday,
+    sapsii,
+    sofa,
+    first_careunit,
+    admission_type,
+    comorbidity_cardio,
+    comorbidity_vascular,
+    comorbidity_neuro,
+    comorbidity_pneumo,
+    comorbidity_metabolic,
+    comorbidity_renal,
+    comorbidity_liver,
+    comorbidity_cancer,
+    twavg_po2,
+    hypero2,
+    lactate_max_firstday,
+    pco2_max_firstday,
+    ph_min_firstday,
+    bicarbonate_min_firstday,
+    albumin_min_firstday,
+    bilirubin_max_firstday,
+    creatinine_max_firstday,
+    hemoglobin_min_firstday,
+    source_pulm,
+    source_neuro,
+    source_urogyn,
+    source_dig,
+    source_ost,
+    source_ent,
+    source_card,
+    source_skin,
+    source_other,
+    norepinephrine_max_dose,
+    norepinephrine_duration,
+    death_icu
+  ) %>%
+  rename(
+    "Age (years)" = admission_age,
+    "Sex (Male)" = gender,
+    "BMI (kg/m2)" = bmi_firstday,
+    "SAPSII" = sapsii,
+    "SOFA" = sofa,
+    "First ICU (SICU)" = first_careunit,
+    "Admission type (Emergency/Urgent)" = admission_type,
+    "Cardiac" = comorbidity_cardio,
+    "Vascular" = comorbidity_vascular,
+    "Neurological" = comorbidity_neuro,
+    "Pulmonary" = comorbidity_pneumo,
+    "Metabolic" = comorbidity_metabolic,
+    "Renal" = comorbidity_renal,
+    "Liver" = comorbidity_liver,
+    "Cancer" = comorbidity_cancer,
+    "TWA-PaO2 (mmHg)" = twavg_po2,
+    "Serum lactate (mmol/L)" = lactate_max_firstday,
+    "PaCO2 (mmHg)" = pco2_max_firstday,
+    "pH" = ph_min_firstday,
+    "Bicarbonate (mmol/L)" = bicarbonate_min_firstday,
+    "Albumin (g/dL)" = albumin_min_firstday,
+    "Bilirubin (mg/dL)" = bilirubin_max_firstday,
+    "Creatinine (mg/dL)" = creatinine_max_firstday,
+    "Hemoglobin (g/dL)" = hemoglobin_min_firstday,
+    "Hyperoxemia (TWA-PaO2 > 120 mmHg)" = hypero2
+  )
+
+factor_vars <- c(
+  "Sex (Male)", "First ICU (SICU)", "Admission type (Emergency/Urgent)",
+  "Cardiac", "Vascular", "Neurological", "Pulmonary", "Metabolic",
+  "Renal", "Liver", "Cancer", "Hyperoxemia (TWA-PaO2 > 120 mmHg)",
+  "source_pulm", "source_neuro", "source_urogyn", "source_dig",
+  "source_ost", "source_ent", "source_card", "source_skin", "source_other"
+  )
+nonnormal_vars <- c(
+  "Age (years)", "BMI (kg/m2)", "SAPSII", "SOFA", "TWA-PaO2 (mmHg)",
+  "Serum lactate (mmol/L)", "PaCO2 (mmHg)", "pH", "Bicarbonate (mmol/L)",
+  "Albumin (g/dL)", "Bilirubin (mg/dL)", "Creatinine (mg/dL)", "Hemoglobin (g/dL)"
+  )
+
+table_surv <- CreateTableOne(
+  vars = names(table_surv_data)[-length(names(table_surv_data))],
+  data = table_surv_data,
+  factorVars = factor_vars,
+  strata = "death_icu"
+)
+table_surv_print <- print(
+  table_surv,
+  nonnormal = nonnormal_vars,
+  dropEqual = TRUE,
+  printToggle = FALSE
+)
+```
+
+```{r}
+table_surv_all <- CreateTableOne(
+  vars = names(table_surv_data)[-length(names(table_surv_data))],
+  data = table_surv_data,
+  factorVars = factor_vars
+)
+table_surv_all_print <- print(
+  table_surv_all,
+  nonnormal = nonnormal_vars,
+  dropEqual = TRUE,
+  printToggle = FALSE
+)
+```
+
+```{r}
+table_surv_final_print <- cbind(table_surv_all_print[, 1], table_surv_print[, c(1:3)])
+
+kable(
+  table_surv_final_print,
+  caption = "Baseline demographics of the cohort for all patients as well as normoxemia and hyperoxemia groups",
+  col.names = c("All", "Survived", "Deceased", "p"),
+  align = c("l", "c", "c", "c", "c")
+) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  group_rows("Comorbidities", 9, 16) %>% 
+  group_rows("Biology", 17, 26) %>% 
+  group_rows("Infection sources", 27, 35)
+```
+
 # Univariate analyses
 
 ```{r}
@@ -322,7 +419,7 @@ table_bivariate_data <- cohort %>%
     noso_vap,
     noso_urinary,
     noso_cvc_other,
-    hypero2
+    hypero2,
   ) %>%
   rename(
     "ICU LOS" = los_icu,
@@ -337,14 +434,21 @@ table_bivariate_data <- cohort %>%
     "30-day mortality" = death_thirtydays
   )
 
-vars <- c("ICU mortality", "Hospital mortality", "30-day mortality", "ICU LOS",
-          "Hospital LOS", "Norepinephrine maximum dose (mcg/kg/min)",
-          "Norepinephrine duration (hours)", "Ventilation acquired pneumoniae",
-          "Urinary catheter infection", "Central line infection")
-factor_vars <- c("Ventilation acquired pneumoniae", "Urinary catheter infection",
-                 "Central line infection", "30-day mortality", "ICU mortality",
-                 "Hospital mortality")
-nonnormal_vars <- c("ICU LOS", "Hospital LOS")
+vars <- c(
+  "ICU mortality", "Hospital mortality", "30-day mortality", "ICU LOS",
+  "Hospital LOS", "Norepinephrine maximum dose (mcg/kg/min)",
+  "Norepinephrine duration (hours)", "Ventilation acquired pneumoniae",
+  "Urinary catheter infection", "Central line infection"
+  )
+factor_vars <- c(
+  "Ventilation acquired pneumoniae", "Urinary catheter infection",
+  "Central line infection", "30-day mortality", "ICU mortality",
+  "Hospital mortality"
+  )
+nonnormal_vars <- c(
+  "ICU LOS", "Hospital LOS", "Norepinephrine maximum dose (mcg/kg/min)",
+  "Norepinephrine duration (hours)"
+  )
 
 table_bivar <- CreateTableOne(
   vars = vars,
@@ -361,34 +465,34 @@ table_bivar_print <- print(
 ```
 
 ```{r}
-bivar_smd <- ExtractSmd(table_bivar)
-smd_list <- tibble(
-  smd = as.character(),
-  low = as.character(),
-  high = as.character(),
-  txt = as.character())
-smd_list <- smd_list %>% add_row(smd = "", low = "", high = "", txt = "")
-
-for(i in 1:length(bivar_smd)){
-  smd_ci <- ci.smd(smd = bivar_smd[i], n.1 = 214, n.2 = 274, conf.level = .95)
-  smd_list <- smd_list %>%
-    add_row(
-      smd = round(bivar_smd[i], 2),
-      low = round(smd_ci$Lower.Conf.Limit.smd, 2),
-      high = round(smd_ci$Upper.Conf.Limit.smd, 2))
-}
-
-smd_list$txt <- paste0(smd_list$smd, " [", smd_list$low, "-", smd_list$high, "]")
-smd_list[1,4] <- ""
+# bivar_smd <- ExtractSmd(table_bivar)
+# smd_list <- tibble(
+#   smd = as.character(),
+#   low = as.character(),
+#   high = as.character(),
+#   txt = as.character())
+# smd_list <- smd_list %>% add_row(smd = "", low = "", high = "", txt = "")
+# 
+# for(i in 1:length(bivar_smd)){
+#   smd_ci <- ci.smd(smd = bivar_smd[i], n.1 = 214, n.2 = 274, conf.level = .95)
+#   smd_list <- smd_list %>%
+#     add_row(
+#       smd = round(bivar_smd[i], 2),
+#       low = round(smd_ci$Lower.Conf.Limit.smd, 2),
+#       high = round(smd_ci$Upper.Conf.Limit.smd, 2))
+# }
+# 
+# smd_list$txt <- paste0(smd_list$smd, " [", smd_list$low, "-", smd_list$high, "]")
+# smd_list[1,4] <- ""
 ```
 
 ```{r}
-table_bivar_final_print <- cbind(table_bivar_print[, c(1:2)], smd_list$txt, table_bivar_print[, 3])
+table_bivar_final_print <- cbind(table_bivar_print[, c(1:2)], table_bivar_print[, 3])
 kable(
   table_bivar_final_print,
   caption = "Primary and secondary outcomes",
-  col.names = c("Normoxia", "Hyperoxia", "SMD", "p"),
-  align = c("l", "c", "c", "c", "c")
+  col.names = c("Normoxia", "Hyperoxia", "p"),
+  align = c("l", "c", "c", "c")
 ) %>%
   kable_styling(bootstrap_options = c("striped", "hover")) %>%
   group_rows("Primary outcome", 2, 2) %>%
@@ -426,8 +530,22 @@ list_crude_or <- c(list_crude_or,
 list_crude_low <- c(list_crude_low, round(or_death_thirty$measures[2, 2], 2))
 list_crude_high <- c(list_crude_high, round(or_death_thirty$measures[2, 3], 2))
 
+# ICU LOS
+mod_or_los_icu <- glm(hypero2_bin ~ los_icu, family = "binomial", data = cohort)
+list_crude_or <- c(list_crude_or,
+                   round(exp(tidy(mod_or_los_icu)$estimate[2]), 2))
+list_crude_low <- c(list_crude_low, round(exp(confint_tidy(mod_or_los_icu)), 2)$conf.low[2])
+list_crude_high <- c(list_crude_high, round(exp(confint_tidy(mod_or_los_icu)), 2)$conf.high[2])
+
+# Hospital LOS
+mod_or_los_hosp <- glm(hypero2_bin ~ los_hospital, family = "binomial", data = cohort)
+list_crude_or <- c(list_crude_or,
+                   round(exp(tidy(mod_or_los_hosp)$estimate[2]), 2))
+list_crude_low <- c(list_crude_low, round(exp(confint_tidy(mod_or_los_hosp)), 2)$conf.low[2])
+list_crude_high <- c(list_crude_high, round(exp(confint_tidy(mod_or_los_hosp)), 2)$conf.high[2])
+
 tab_crude_or <- tibble(
-  label = c("death_icu", "death_hosp", "death_thirtydays"),
+  label = c("death_icu", "death_hosp", "death_thirtydays", "los_icu", "los_hospital"),
   or = list_crude_or,
   low = list_crude_low,
   high = list_crude_high,
@@ -446,14 +564,14 @@ tab_crude_or %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
-```{r echo=FALSE, fig.height=2, dpi=400}
+```{r echo=FALSE}
 tab_crude_or$label <- factor(tab_crude_or$label, levels = rev(tab_crude_or$label))
 
 ggplot(tab_crude_or, aes(x = label, y = or, ymin = low, ymax = high)) +
   geom_pointrange(color = "#455a64") +
   geom_hline(yintercept = 1, lty = 2, color = "#455a64") + 
   coord_flip() +
-  labs(x = "", y = "Unadjusted OR (CI 95%)") +
+  labs(x = "", y = "Unadjusted OR (95% CI)") +
   theme_bw()
 ```
 
@@ -466,89 +584,272 @@ ggplot(cohort) +
     x = "TWA-PaO2 (mmHg)",
     y = "Count"
   ) +
-  scale_fill_grey(
-    name = "Groups",
-    labels = c("Normoxia", "Hyperoxia")
-  ) +
-  theme_bw() +
-  theme(
-    legend.position = "bottom",
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    axis.text.x = element_text(size = 18),
-    axis.text.y = element_text(size = 18),
-    legend.title = element_text(size = 18),
-    legend.text = element_text(size = 18)
-  )
+  # scale_fill_grey(
+  #   name = "Groups",
+  #   labels = c("Normoxia", "Hyperoxia")
+  # ) +
+  theme_bw()
+  # theme(
+  #   legend.position = "bottom",
+  #   axis.title.x = element_text(size = 24),
+  #   axis.title.y = element_text(size = 24),
+  #   axis.text.x = element_text(size = 18),
+  #   axis.text.y = element_text(size = 18),
+  #   legend.title = element_text(size = 18),
+  #   legend.text = element_text(size = 18)
+  # )
 ```
+
+
+
 
 # Multivariate analysis
 
 ```{r}
-model1 <- glm(death_icu ~ admission_age + first_careunit + hypero2_bin + sofa +
-                comorbidity_liver + norepinephrine_duration + hemoglobin_min_firstday,
-              data = cohort,
-              family = "binomial")
-summary(model1)
-model1_desc <- tidy(model1)
+data_corr <- cohort %>%
+  select(
+    sapsii, sofa, comorbidity_liver, comorbidity_cancer, hypero2_bin,
+    lactate_max_firstday, ph_min_firstday, bicarbonate_min_firstday,
+    bilirubin_max_firstday, creatinine_max_firstday, source_other
+  ) %>% 
+  mutate_all(as.numeric)
+
+corrplot(cor(data_corr, use = "complete.obs"), method = "circle", tl.cex = 0.6)
+```
+
+## ICU mortality
+
+```{r}
+model_icu <- glm(
+  death_icu ~ hypero2_bin + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = "binomial"
+)
+model_icu_desc <- tidy(model_icu)
+
+summary(model_icu)
 ```
 
 ```{r}
 tab_reglog <- tibble(
-  label = model1_desc$term,
-  OR = round(exp(model1_desc$estimate), 2),
-  low = round(exp(confint_tidy(model1)), 2)$conf.low,
-  high = round(exp(confint_tidy(model1)), 2)$conf.high,
-  p = round(model1_desc$p.value, 5)
-)
-tab_reglog$IC_95 <- paste0("[", tab_reglog$low, "-", tab_reglog$high, "]")
+  label = model_icu_desc$term,
+  OR = round(exp(model_icu_desc$estimate), 2),
+  low = round(exp(confint_tidy(model_icu)), 2)$conf.low,
+  high = round(exp(confint_tidy(model_icu)), 2)$conf.high,
+  p = round(model_icu_desc$p.value, 3)
+) %>% 
+  mutate(
+    label = case_when(
+      label == "hypero2_bin" ~ "Hyperoxemia",
+      label == "sofa" ~ "SOFA score",
+      label == "comorbidity_liver1" ~ "Hepatic comorbidity",
+      label == "comorbidity_cancer1" ~ "Cancer",
+      label == "lactate_max_firstday" ~ "Serum lactate",
+      label == "ph_min_firstday" ~ "pH",
+      label == "bicarbonate_min_firstday" ~ "Bicarbonate",
+      label == "bilirubin_max_firstday" ~ "Bilirubin",
+      label == "creatinine_max_firstday" ~ "Creatinine",
+      label == "source_other1" ~ "Other/unknown infection source"
+    ),
+    IC_95 = paste0("[", low, "-", high, "]")
+  )
 
-tab_reglog %>%
+ktab_reglog <- tab_reglog %>%
+  filter(label != "(Intercept)") %>% 
   select(label, OR, IC_95, p) %>%
   kable(
-    caption = "Multivariate analysis of ICU mortality (logistic regression)",
+    col.names = c("", "OR", "95% CI", "p"),
+    align = c("c", "c", "c", "c")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+ktab_reglog
+```
+
+```{r}
+reglog_plot <- tab_reglog %>% 
+  mutate(label = factor(label, levels = rev(label))) %>% 
+  filter(label != "(Intercept)") %>% 
+  ggplot(aes(x = label, y = OR, ymin = low, ymax = high)) +
+  geom_pointrange(color = "#455a64") +
+  geom_hline(yintercept = 1, lty = 2, color = "#455a64") + 
+  coord_flip() +
+  labs(x = "", y = "Adjusted OR (95% Confidence Interval)") +
+  theme_bw()
+
+reglog_plot
+```
+```{r eval=FALSE, include=FALSE}
+tab_reglog <- tab_reglog %>% 
+  select(label, OR, IC_95, p) %>% 
+  mutate(p = as.character(p)) %>% 
+  filter(!is.na(label)) %>% 
+  rename(
+    "Variable" = label,
+    "95% CI" = IC_95,
+    "p value" = p
+  )
+
+tab_reglog[4, 4] <- "<0.001"
+
+reglog_plot_print <- reglog_plot / gridExtra::tableGrob(tab_reglog, rows = NULL)
+
+ggsave(
+  filename = "sfigure2_reglog.eps",
+  plot = print(reglog_plot_print),
+  width = 8, height = 7, dpi = 600)
+```
+
+## Hospital mortality
+
+```{r}
+model_hosp <- glm(
+  death_hosp ~ hypero2_bin + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = "binomial"
+)
+model_hosp_desc <- tidy(model_hosp)
+
+summary(model_hosp)
+```
+
+```{r}
+tibble(
+  label = model_hosp_desc$term,
+  OR = round(exp(model_hosp_desc$estimate), 2),
+  low = round(exp(confint_tidy(model_hosp)), 2)$conf.low,
+  high = round(exp(confint_tidy(model_hosp)), 2)$conf.high,
+  p = round(model_hosp_desc$p.value, 5)
+) %>% 
+  mutate(IC_95 = paste0("[", low, "-", high, "]")) %>% 
+  select(label, OR, IC_95, p) %>%
+  kable(
+    caption = "Multivariate analysis of hospital mortality (logistic regression)",
     col.names = c("", "OR", "IC (95%)", "p"),
     align = c("c", "c", "c", "c")
   ) %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
-```{r echo=FALSE, dpi=400}
-tab_reglog$label <- factor(tab_reglog$label, levels = rev(tab_reglog$label))
+## 30-days mortality
 
-ggplot(tab_reglog, aes(x = label, y = OR, ymin = low, ymax = high)) +
-  geom_pointrange(color = "#455a64") +
-  geom_hline(yintercept = 1, lty = 2, color = "#455a64") + 
-  coord_flip() +
-  labs(x = "", y = "Adjusted OR (CI 95%)") +
-  theme_bw()
+```{r}
+model_thirtydays <- glm(
+  death_thirtydays ~ hypero2_bin + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = "binomial"
+)
+model_thirtydays_desc <- tidy(model_thirtydays)
+
+summary(model_thirtydays)
+```
+
+```{r}
+tibble(
+  label = model_thirtydays_desc$term,
+  OR = round(exp(model_thirtydays_desc$estimate), 2),
+  low = round(exp(confint_tidy(model_thirtydays)), 2)$conf.low,
+  high = round(exp(confint_tidy(model_thirtydays)), 2)$conf.high,
+  p = round(model_thirtydays_desc$p.value, 5)
+) %>% 
+  mutate(IC_95 = paste0("[", low, "-", high, "]")) %>% 
+  select(label, OR, IC_95, p) %>%
+  kable(
+    caption = "Multivariate analysis of 30-days mortality (logistic regression)",
+    col.names = c("", "OR", "IC (95%)", "p"),
+    align = c("c", "c", "c", "c")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## ICU length of stay
+
+```{r}
+model_los <- vglm(
+  as.integer(los_icu) ~ hypero2_bin + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = posnegbinomial()
+)
+model_los_sum <- summary(model_los)
+model_los_sum 
+```
+
+```{r}
+tibble(
+  label = names(model_los@coefficients),
+  OR = round(exp(model_los@coefficients), 2),
+  low = round(exp(confint(model_los)[, "2.5 %"]), 2),
+  high = round(exp(confint(model_los)[, "97.5 %"]), 2),
+  p = round(model_los_sum@coef3[, "Pr(>|z|)"], 3)
+) %>% 
+  mutate(IC_95 = paste0("[", low, "-", high, "]")) %>% 
+  select(label, OR, IC_95, p) %>%
+  kable(
+    caption = "Multivariate analysis of ICU LOS (zero truncated negative binomial regression)",
+    col.names = c("", "OR", "IC (95%)", "p"),
+    align = c("c", "c", "c", "c")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Hospital length of stay
+
+```{r}
+model_los_hosp <- vglm(
+  as.integer(los_hospital) ~ hypero2_bin + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = posnegbinomial()
+)
+model_los_hosp_sum <- summary(model_los_hosp)
+model_los_hosp_sum 
+```
+
+```{r}
+tibble(
+  label = names(model_los_hosp@coefficients),
+  OR = round(exp(model_los_hosp@coefficients), 2),
+  low = round(exp(confint(model_los_hosp)[, "2.5 %"]), 2),
+  high = round(exp(confint(model_los_hosp)[, "97.5 %"]), 2),
+  p = round(model_los_hosp_sum@coef3[, "Pr(>|z|)"], 3)
+) %>% 
+  mutate(IC_95 = paste0("[", low, "-", high, "]")) %>% 
+  select(label, OR, IC_95, p) %>%
+  kable(
+    caption = "Multivariate analysis of hospital LOS (zero truncated negative binomial regression)",
+    col.names = c("", "OR", "IC (95%)", "p"),
+    align = c("c", "c", "c", "c")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 ## Adjusted probability of in-ICU death by TWA-PaO2
 
-```{r, dpi=400}
+```{r message=FALSE, warning=FALSE, dpi=400}
 data_plot_death <- tibble(
-  prob = model1$fitted.values,
-  twavg_po2 = cohort$twavg_po2
+  prob = model_icu$fitted.values,
+  twavg_po2 = cohort[as.numeric(names(model_icu$fitted.values)), 'twavg_po2']
 )
 
 ggplot(data_plot_death, aes(x = twavg_po2, y = prob)) +
-  geom_point(size = 6, color = "#666666") +
-  geom_smooth(method = loess, size = 3, color = "black") +
+  geom_point() +
+  geom_smooth(method = loess) +
   labs(
     y = "Adjusted probability of in-ICU death",
     x = "Time weighted average PaO2 (mmHg)"
   ) +
   scale_y_continuous(limits = c(0, 1)) +
-  theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 24),
-    axis.title.y = element_text(size = 24),
-    axis.text.x = element_text(size = 18),
-    axis.text.y = element_text(size = 18)
-  )
+  theme_bw()
 ```
-
 
 # Survival analysis
 
@@ -565,9 +866,11 @@ survdiff(Surv(time = los_icu, event = as.numeric(death_icu))~hypero2, data = coh
 ## Cox model
 
 ```{r}
-model_cox <- coxph(Surv(time = los_icu, event = as.numeric(death_icu))~admission_age + first_careunit + hypero2_bin + sofa + comorbidity_liver + norepinephrine_duration + hemoglobin_min_firstday, data = cohort)
+model_cox <- coxph(Surv(time = los_icu, event = as.numeric(death_icu))~hypero2_bin + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other, data = cohort)
 summary(model_cox)
-model_cox_desc <- tidy(model_cox)
+model_cox_desc <- tidy(model_cox, conf.int = TRUE)
 ```
 
 ```{r}
@@ -604,26 +907,165 @@ ggplot(tab_cox, aes(x = label, y = OR, ymin = low, ymax = high)) +
 ## Kaplan-Meier curve
 
 ```{r, dpi=400}
-ggsurvplot(
-  fit, data = cohort,
-  pval = "Hazard ratio 0.83, 95% CI [0.61-1.14]\np = 0.259",
-  pval.size = 6,
+survplot <- ggsurvplot(
+  fit,
+  data = cohort,
+  size = 1.2,
+  pval = "Hazard ratio 0.97, 95% CI [0.68-1.37]\np = 0.845",
+  pval.size = 7,
   pval.coord = c(0.2, 0.10),
   risk.table = TRUE,
   risk.table.height = 0.2,
   tables.theme = theme_cleantable(),
   tables.y.text.col = FALSE,
   linetype = "strata",
-  palette = "grey",
+  palette = palette,
   xlab = "Days since admission",
   legend = c(0.85, 0.7),
   legend.title = "",
   legend.labs = c("Normoxia", "Hyperoxia"),
-  fontsize = 5,
-  font.x = 16,
-  font.y = 16,
-  font.tickslab = 14,
-  font.legend = 14,
+  fontsize = 7,
+  font.x = 20,
+  font.y = 20,
+  font.tickslab = 18,
+  font.legend = 18,
   ggtheme = theme_classic()
 )
+survplot$table <- survplot$table +
+  theme(plot.title = element_text(size = 20),
+        axis.text.y = element_text(size = 18))
+
+survplot
 ```
+
+```{r}
+ggsave(filename = "figure3_survival_curve.eps",
+       plot = print(survplot),
+       width = 20, height = 13, dpi = 600)
+```
+
+# Sensitivy analyses
+
+## Different TWA-PaO2 cutoffs
+
+```{r}
+cohort <- cohort %>%
+  mutate(
+    hypero2_100 = ifelse(twavg_po2 > 100, 1, 0),
+    hypero2_100 = factor(hypero2_100),
+    hypero2_200 = ifelse(twavg_po2 > 200, 1, 0),
+    hypero2_200 = factor(hypero2_200),
+    hypero2_300 = ifelse(twavg_po2 > 300, 1, 0),
+    hypero2_300 = factor(hypero2_300),
+  )
+```
+
+```{r}
+cohort %>% 
+  summarise(
+    across(hypero2_100:hypero2_300, ~ twoby2(1 - as.numeric(.x), 1 - as.numeric(death_icu), print = FALSE)$measures[2,])
+  ) %>% 
+  add_row(
+    hypero2_100 = twoby2(1 - as.numeric(cohort$hypero2_100), 1 - as.numeric(cohort$death_icu), print = FALSE)$p.value[1],
+    hypero2_200 = twoby2(1 - as.numeric(cohort$hypero2_200), 1 - as.numeric(cohort$death_icu), print = FALSE)$p.value[1],
+    hypero2_300 = twoby2(1 - as.numeric(cohort$hypero2_300), 1 - as.numeric(cohort$death_icu), print = FALSE)$p.value[1],
+  ) %>% 
+  mutate(var = c("or", "or_low", "or_high", "p_value")) %>% 
+  pivot_longer(starts_with("hypero2_")) %>% 
+  pivot_wider(names_from = "var", values_from = "value") %>% 
+  mutate_if(is.numeric, round, digits = 3) %>% 
+  mutate(ic = paste0("[", or_low, "-", or_high, "]")) %>%
+  select(name, or, ic, p_value) %>% 
+  kable(
+    caption = "Cutoffs for hyperoxemia, undadjustd analyses (ICU mortality)",
+    col.names = c("", "OR", "IC (95%)", "p"),
+    align = c("c", "c", "c", "c")
+  ) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r}
+model_100 <- glm(
+  death_icu ~ hypero2_100 + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = "binomial"
+)
+model_100_desc <- tidy(model_100)
+
+summary(model_100)
+```
+
+```{r}
+table_sensitivity <- tibble(
+  label = "TWA-PaO2 > 100 mmHg",
+  OR = round(exp(model_100_desc$estimate[2]), 2),
+  low = round(exp(confint_tidy(model_100)), 2)$conf.low[2],
+  high = round(exp(confint_tidy(model_100)), 2)$conf.high[2],
+  p = round(model_100_desc$p.value[2], 5)
+) 
+```
+
+```{r}
+model_200 <- glm(
+  death_icu ~ hypero2_200 + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = "binomial"
+)
+model_200_desc <- tidy(model_200)
+
+summary(model_200)
+```
+
+```{r}
+table_sensitivity <- table_sensitivity %>% 
+  add_row(
+    label = "TWA-PaO2 > 200 mmHg",
+    OR = round(exp(model_200_desc$estimate[2]), 2),
+    low = round(exp(confint_tidy(model_200)), 2)$conf.low[2],
+    high = round(exp(confint_tidy(model_200)), 2)$conf.high[2],
+    p = round(model_200_desc$p.value[2], 5)
+)
+```
+
+```{r}
+model_300 <- glm(
+  death_icu ~ hypero2_300 + sofa + comorbidity_liver + comorbidity_cancer +
+    lactate_max_firstday + ph_min_firstday + bicarbonate_min_firstday +
+    bilirubin_max_firstday + creatinine_max_firstday + source_other,
+  data = cohort,
+  family = "binomial"
+)
+model_300_desc <- tidy(model_300)
+
+summary(model_300)
+```
+
+```{r}
+table_sensitivity <- table_sensitivity %>% 
+  add_row(
+    label = "TWA-PaO2 > 300 mmHg",
+    OR = round(exp(model_300_desc$estimate[2]), 2),
+    low = round(exp(confint_tidy(model_300)), 2)$conf.low[2],
+    high = round(exp(confint_tidy(model_300)), 2)$conf.high[2],
+    p = round(model_300_desc$p.value[2], 5)
+)
+```
+
+```{r}
+table_sensitivity %>% 
+  mutate(IC_95 = paste0("[", low, "-", high, "]")) %>%
+  select(label, OR, IC_95, p) %>%
+  kable(
+    caption = "Multivariate sensitivity analyses of ICU mortality",
+    col.names = c("", "OR", "IC (95%)", "p"),
+    align = c("c", "c", "c", "c")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+
+

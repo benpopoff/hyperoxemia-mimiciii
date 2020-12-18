@@ -62,6 +62,7 @@ TimeWeightedAvgPo2 <- function(abg, intime){
 ```
 
 # Compute time weighted average PaO2 for every patient
+
 ```{r}
 cohort_shock <- read.csv("data/cohort_shock.csv")
 cohort_shock$intime <- as.POSIXct(cohort_shock$intime)
@@ -94,7 +95,7 @@ for(i in 1:nrow(cohort_shock)){
   #print(paste("icustay = ", id, "twavg_po2 = ", TimeWeightedAvgPo2(abg, intime)))
 }
 
-summary(cohort_shock)
+glimpse(cohort_shock)
 ```
 
 # Exposition groups: hypoxia, normoxia, hyperoxia
@@ -108,6 +109,53 @@ levels(cohort_shock$hypero2) <- c("hypo", "normo", "hyper")
 table(cohort_shock$hypero2)
 ```
 
+# Dataset
+
+```{r}
+cohort_shock$X <- NULL
+cohort_shock$first_careunit <- factor(cohort_shock$first_careunit)
+cohort_shock$first_wardid <- factor(cohort_shock$first_wardid)
+cohort_shock$admission_type <- factor(cohort_shock$admission_type)
+cohort_shock$vaso_firstday <- factor(cohort_shock$vaso_firstday)
+cohort_shock$gender <- factor(cohort_shock$gender)
+cohort_shock$rrt <- factor(cohort_shock$rrt)
+cohort_shock$comorbidity_cardio <- factor(cohort_shock$comorbidity_cardio)
+cohort_shock$comorbidity_vascular <- factor(cohort_shock$comorbidity_vascular)
+cohort_shock$comorbidity_neuro <- factor(cohort_shock$comorbidity_neuro)
+cohort_shock$comorbidity_pneumo <- factor(cohort_shock$comorbidity_pneumo)
+cohort_shock$comorbidity_metabolic <- factor(cohort_shock$comorbidity_metabolic)
+cohort_shock$comorbidity_renal <- factor(cohort_shock$comorbidity_renal)
+cohort_shock$comorbidity_liver <- factor(cohort_shock$comorbidity_liver)
+cohort_shock$comorbidity_cancer <- factor(cohort_shock$comorbidity_cancer)
+cohort_shock$noso_vap <- factor(cohort_shock$noso_vap)
+cohort_shock$noso_urinary <- factor(cohort_shock$noso_urinary)
+cohort_shock$noso_cvc <- factor(cohort_shock$noso_cvc)
+cohort_shock$noso_cvc_other <- factor(cohort_shock$noso_cvc_other)
+cohort_shock$source_pulm <- factor(cohort_shock$source_pulm)
+cohort_shock$source_urogyn <- factor(cohort_shock$source_urogyn)
+cohort_shock$source_neuro <- factor(cohort_shock$source_neuro)
+cohort_shock$source_dig <- factor(cohort_shock$source_dig)
+cohort_shock$source_ost <- factor(cohort_shock$source_ost)
+cohort_shock$source_ent <- factor(cohort_shock$source_ent)
+cohort_shock$source_card <- factor(cohort_shock$source_card)
+cohort_shock$source_skin <- factor(cohort_shock$source_skin)
+cohort_shock$source_other <- factor(cohort_shock$source_other)
+cohort_shock$death_icu <- factor(cohort_shock$death_icu)
+cohort_shock$death_thirtydays <- factor(cohort_shock$death_thirtydays)
+cohort_shock$death_hosp <- factor(cohort_shock$death_hosp)
+cohort_shock$flag_shock <- factor(cohort_shock$flag_shock)
+cohort_shock$hypero2 <- factor(cohort_shock$hypero2)
+cohort_shock$hypero2 <- relevel(cohort_shock$hypero2, ref = "normo")
+
+# Merge Emergency and Urgent admission types
+cohort_shock$admission_type <- as.character(cohort_shock$admission_type)
+cohort_shock$admission_type[cohort_shock$admission_type %in% c("EMERGENCY", "URGENT")] <- "Emergency/Urgent"
+cohort_shock$admission_type <- factor(cohort_shock$admission_type)
+levels(cohort_shock$admission_type) <- c("Elective", "Emergency/Urgent")
+
+saveRDS(cohort_shock, "data/cohort_shock_twavgpo2_all.rds")
+```
+
 ```{r}
 # Exclude hypoxemia patients
 cohort_shock <- cohort_shock %>% 
@@ -117,7 +165,7 @@ cohort_shock$hypero2 <- factor(cohort_shock$hypero2)
 ```
 
 ```{r}
-write_csv(cohort_shock, "data/cohort_shock_twavgpo2.csv")
+saveRDS(cohort_shock, "data/cohort_shock_twavgpo2.rds")
 ```
 
 ```{r}
